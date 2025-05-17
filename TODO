@@ -1,0 +1,47 @@
+⚡ Quick diagnosis ⚡
+
+Your Claude Desktop client is looking for an RFC-8414 / OAuth 2 “well-known” metadata document and a dynamic-client-registration endpoint at
+
+https://recruitee-mcp-server.fly.dev/.well-known/oauth-authorization-server
+https://recruitee-mcp-server.fly.dev/register
+Because oauth2-proxy is only an authentication reverse-proxy, not an OAuth 2 / OIDC authorization-server, it has nothing to return at those routes, so it answers 403/404.
+mcp-remote interprets that as “the server doesn’t speak the auth dialect I need” and aborts with the HTTP 502 / 400 / bad JSON errors you see.
+OAuth2 Proxy
+OAuth2 Proxy
+
+In short: oauth2-proxy + Google cannot satisfy the remote-MCP handshake.
+You have two realistic ways forward:
+
+1 · Keep Google SSO → add a real OIDC server
+
+What to add	Examples	Why
+Full OIDC / OAuth 2 AS	Auth0, Google IAP, Dex, Keycloak	Exposes /.well-known/*, supports dynamic-client-registration (RFC 7591)
+Public metadata + /register stub	Tiny FastAPI/Fastify app in the same Fly VM	Satisfies MCP with ~30 lines of code if you hard-code a dummy client_id/secret
+If you don’t want another container, add a micro-endpoint to your app/app.py above the MCP code:
+
+from fastapi import FastAPI, Response
+
+meta = {
+    "issuer": "https://recruitee-mcp-server.fly.dev",
+    "authorization_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+    "token_endpoint": "https://oauth2.googleapis.com/token",
+    "grant_types_supported": ["authorization_code"],
+    "response_types_supported": ["code"],
+}
+app = FastAPI()
+
+@app.get("/.well-known/oauth-authorization-server")
+def meta_doc():
+    return meta                        # <- JSON 200
+
+@app.post("/register")
+def reg():
+    return {"client_id": "desktop", "client_secret": "not_used"}
+Then tell oauth2-proxy to skip auth on those two routes (they must be public!):
+
+--skip-auth-route='^/\\.well-known/oauth-authorization-server$' \
+--skip-auth-route='^/register$'
+Re-deploy, and the 403/404 disappear. (Oauth2-proxy still protects /mcp/.)
+GitHub
+
+Down-side: you’re now maintaining a minimal spec-compliant OIDC façade.
