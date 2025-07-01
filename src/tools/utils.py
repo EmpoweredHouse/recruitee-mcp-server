@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime
 import os
 import httpx
@@ -146,3 +147,45 @@ async def markdown_to_url(markdown_str: str) -> str:
     except Exception as e:
         raise ValueError(f"Error converting Markdown to HTML file: {e}") from e
 
+
+@dataclass
+class Record:
+    id: str
+    title: str
+    text: str
+    metadata: dict
+
+
+RECORDS = [
+    Record(id="123", title="John Doe", text="Software Engineer", metadata={"company": "AppUnite"}),
+    Record(id="456", title="Jane Smith", text="Product Manager", metadata={"company": "AppUnite"}),
+]
+LOOKUP = {r.id: r for r in RECORDS}
+
+@mcp.tool()
+async def search(query: str):
+    """
+    Simple unranked keyword search across title, text, and metadata.
+    Searches for any of the query terms in the record content.
+    Returns a list of matching record IDs for ChatGPT to fetch.
+    """
+    toks = query.lower().split()
+    ids = []
+    for r in RECORDS:
+        record_txt = " ".join(
+            [r.title, r.text, " ".join(r.metadata.values())]
+        ).lower()
+        if any(t in record_txt for t in toks):
+            ids.append(r.id)
+
+    return {"ids": ids }
+
+@mcp.tool()
+async def fetch(id: str):
+    """
+    Fetch a record by ID.
+    Returns the complete record data for ChatGPT to analyze and cite.
+    """
+    if id not in LOOKUP:
+        raise ValueError(f"Unknown record ID: {id}")
+    return LOOKUP[id]

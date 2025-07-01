@@ -5,7 +5,7 @@ import uvicorn
 from fastapi.staticfiles import StaticFiles
 
 from src.utils.server_config import mcp
-from src.utils.auth import BearerAuthMiddleware, LoginPasswordMiddleware
+from src.utils.auth import LoginPasswordMiddleware, OAuthMiddleware, add_oauth_endpoints
 
 from src.tools import candidates, lookup, metrics, utils  # noqa: F401
 from src.prompts import prompts # noqa: F401
@@ -14,7 +14,7 @@ from src.prompts import prompts # noqa: F401
 def mount_static_files(app):
     """Helper function to mount static files to the FastAPI app."""
     # Use Fly volume mount path for persistent storage
-    documents_dir = "/data"
+    documents_dir = os.getenv("DOCUMENTS_DIR")
     
     # Ensure the directory exists
     os.makedirs(documents_dir, exist_ok=True)
@@ -81,9 +81,19 @@ if __name__ == "__main__":
         app = mcp.http_app(
             path=args.path,
         )
-        app.add_middleware(BearerAuthMiddleware, protected_paths=["/mcp"])
+        # add_oauth_endpoints(app)
+        # app.add_middleware(OAuthMiddleware, protected_paths=["/mcp"])
         app.add_middleware(LoginPasswordMiddleware, protected_paths=["/documents"])
         mount_static_files(app)
+        
+        # # Add debug logging middleware
+        # @app.middleware("http")
+        # async def log_requests(request, call_next):
+        #     print(f"DEBUG: {request.method} {request.url.path}?{request.url.query} - Headers: {dict(request.headers)}")
+        #     response = await call_next(request)
+        #     print(f"DEBUG: Response status: {response.status_code}")
+        #     return response
+        
         uvicorn.run(app, host=args.host, port=args.port)
 
     elif args.transport == "sse":

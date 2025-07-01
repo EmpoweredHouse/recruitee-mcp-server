@@ -8,5 +8,6 @@ dependencies = [
     "async-lru>=2.0.5",
     "fastapi>=0.115.12",
     "fastmcp==2.8.1",
+    "httpx>=0.24.0",
     "markdown>=3.8.2",
 ]
